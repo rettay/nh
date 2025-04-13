@@ -62,7 +62,11 @@ export function scoreFullName(
   score: number;
   breakdown: Record<string, string>;
 } {
+  
+  console.log("Loaded profile:", CULTURE_PROFILES[culture]);  
   const [first, ...rest] = fullName.trim().split(" ");
   const last = rest.join(" ") || "";
+
+  
   return scoreName(first, last, culture, gender);
 }
