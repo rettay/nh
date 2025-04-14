@@ -1,4 +1,6 @@
 // engine/scoreName.ts
+import { phoneticHarmony } from "./modules/phoneticHarmony";
+import { phoneticFlowWithSurname } from './modules/phoneticFlow';
 
 import { CULTURE_PROFILES } from "@/engine/data/cultureProfiles";
 
@@ -44,6 +46,19 @@ export function scoreName(
     }
   }
 
+  // Phonetic Harmony Score (scaled from 0–1 to 0–10)
+  const flowScore = phoneticFlowWithSurname(first, last);
+  const flowWeighted = Math.round(flowScore * 10); // scale 0–1 → 0–10
+
+  const harmonyScore = phoneticHarmony(first);
+  const harmonyWeighted = Math.round(harmonyScore * 10);  // scale to 0–10
+  score += harmonyWeighted;
+  breakdown["Phonetic Harmony"] = `+${harmonyWeighted} — Sound aesthetic score (raw: ${harmonyScore.toFixed(2)})`;
+
+  
+  score += flowWeighted;
+  breakdown["Phonetic Flow"] = `+${flowWeighted} — Flow with surname (raw: ${flowScore.toFixed(2)})`;
+  
   // Final normalization
   score = Math.max(0, Math.min(100, score));
 
@@ -52,6 +67,7 @@ export function scoreName(
     breakdown,
   };
 }
+
 
 // Optional helper for use in generator
 export function scoreFullName(

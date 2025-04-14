@@ -97,7 +97,7 @@ export default function NameGenerator() {
               >
                 <Card>
                   <CardContent>
-                    <h2 className="text-lg font-semibold">{n.name}</h2>
+                    <h2 className="text-lg font-semibold">{n.name} {surname}</h2>
                     <p className="text-sm text-muted-foreground">Score: {n.score}</p>
                     <ul className="mt-2 text-xs text-gray-500 list-disc pl-4 space-y-1">
                       {Object.entries(n.breakdown).map(([key, value]) => (

@@ -10,18 +10,22 @@ type Culture = 'italian' | 'chinese' | 'us_english';
 type CultureWeights = Record<Culture, number>;
 
 type NameEntry = {
-  name?: string;
   given_name?: string;
+  name?: string;
   gender?: string;
   culture?: string;
   type?: string;
   style?: string;
+  meaning?: string;
 };
 
 type GeneratedName = {
   name: string;
   score: number;
   breakdown: Record<string, string>;
+  culture?: string;
+  style?: string;
+  meaning?: string;
 };
 
 type GenerateOptions = {
@@ -38,53 +42,66 @@ const NAME_SOURCES: Record<Culture, NameEntry[]> = {
   us_english: US_ENGLISH_NAMES,
 };
 
+// Local shuffle helper
+function shuffle<T>(arr: T[]): T[] {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
 export function generateGivenNames({
   cultureWeights,
   surname,
   count,
   gender,
-  style
+  style = "any",
 }: GenerateOptions): GeneratedName[] {
-  console.log('Generating with:', { surname, cultureWeights, gender, style, count });
-
-  const totalWeight = Object.values(cultureWeights).reduce((sum, val) => sum + val, 0);
-  const namePool: { name: string; culture: Culture; gender: string }[] = [];
-
-  for (const culture of Object.keys(cultureWeights) as Culture[]) {
-    const source = NAME_SOURCES[culture] || [];
-    const weightedCount = Math.floor((cultureWeights[culture] / totalWeight) * 100);
-
-    const filtered = source.filter((entry) => {
-      const matchesType = !entry.type || entry.type === 'given_name';
-      const matchesGender = gender === 'neutral' || !entry.gender || entry.gender === gender;
-      const matchesStyle = style === 'any' || !entry.style || entry.style === style;
-      return matchesType && matchesGender && matchesStyle;
-    });
-
-    const shuffled = [...filtered].sort(() => Math.random() - 0.5);
-    namePool.push(
-      ...shuffled.slice(0, weightedCount).map((entry) => ({
-        name: entry.name ?? entry.given_name ?? "???",
+  const candidates: NameEntry[] = Object.entries(NAME_SOURCES)
+    .flatMap(([culture, list]) =>
+      list.map((entry) => ({
+        ...entry,
         culture,
-        gender: entry.gender ?? 'unknown',
       }))
     );
-  }
 
-  if (namePool.length === 0) {
-    throw new Error('No names could be generated with the given filters');
-  }
+  const scored = shuffle(candidates)
+    .map((entry) => {
+      const rawName = entry.given_name || entry.name;
+      if (!rawName) return null;
 
-  const scored = namePool.map(({ name, culture, gender }) => {
-    const { score, breakdown } = scoreName(name, surname, culture, gender);
-    return {
-      name: `${name} ${surname}`,
-      score,
-      breakdown,
-    };
-  });
+      let score = scoreName(rawName, surname, entry);
 
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, count);
+      // Style soft boost
+      if (style !== "any") {
+        if (entry.style === style) score *= 1.15;
+        else score *= 0.9;
+      }
+
+      // Gender soft boost
+      if (gender !== "neutral") {
+        if (entry.gender === gender) score *= 1.15;
+        else score *= 0.9;
+      }
+
+      // Culture boost
+      const weight = cultureWeights[entry.culture as Culture] ?? 0;
+      const cultureBoost = 1 + weight * 0.5;
+      score *= cultureBoost;
+
+      return {
+        name: rawName,
+        score,
+        breakdown: {
+          base: score.toFixed(2),
+          cultureBoost: (cultureBoost - 1).toFixed(2),
+          styleMatch: entry.style === style ? "yes" : "no",
+          genderMatch: entry.gender === gender ? "yes" : "no",
+        },
+        culture: entry.culture,
+        style: entry.style,
+        meaning: entry.meaning,
+      };
+    })
+    .filter((n): n is GeneratedName => n !== null)
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, count);
 }
