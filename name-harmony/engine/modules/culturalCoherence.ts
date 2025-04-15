@@ -1,4 +1,4 @@
-import { CULTURE_PROFILES } from "./cultureProfiles";
+import { CULTURE_PROFILES } from "./culturalProfiles";
 
 /**
  * Evaluates how well a name aligns with one or more cultural naming systems.

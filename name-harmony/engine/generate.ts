@@ -22,7 +22,12 @@ type NameEntry = {
 type GeneratedName = {
   name: string;
   score: number;
-  breakdown: Record<string, string>;
+  breakdown: {
+    base: string;
+    cultureBoost: string;
+    styleMatch: string;
+    genderMatch: string;
+  };
   culture?: string;
   style?: string;
   meaning?: string;
@@ -67,7 +72,12 @@ export function generateGivenNames({
       const rawName = entry.given_name || entry.name;
       if (!rawName) return null;
 
-      let score = scoreName(rawName, surname, entry);
+      let score = scoreName(
+        rawName, 
+        surname,
+        entry, // Pass the full entry object
+        cultureWeights // Explicitly pass culture weights
+      );
 
       // Style soft boost
       if (style !== "any") {
@@ -100,7 +110,7 @@ export function generateGivenNames({
         meaning: entry.meaning,
       };
     })
-    .filter((n): n is GeneratedName => n !== null)
+    .filter((n): n is NonNullable<typeof n> => n !== null)
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, count);

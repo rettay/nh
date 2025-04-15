@@ -2,7 +2,6 @@
 
 import { analyzer } from './phoneme';
 import { detectLanguage } from './phoneme/utils/languageDetector';
-
 /**
  * Converts a name to an array of phonemes
  * 

@@ -1,86 +1,48 @@
-// /engine/phoneticHarmony.ts
-import {
-  analyzePhonemes,
-  syllableStructure,
-  estimateStressPattern,
-  sonorityProfile,
-} from './phonaesthetics';
+// engine/modules/phoneticHarmony.ts
+
+import { analyzer } from '../modules/phoneme';
+import { detectLanguage } from '../modules/phoneme/utils/languageDetector';
 
 /**
- * Calculates phonetic harmony score for a name
- * @param name - The name to analyze
- * @param metadata - Optional configuration (e.g., language)
- * @returns Score between 0-1 with higher values indicating better phonetic harmony
+ * Calculates phonetic harmony score for a name based on
+ * syllable structure, stress pattern, and sonority.
  */
-export function phoneticHarmony(name: string, metadata?: Record<string, any>): number {
-  const lowerName = name.toLowerCase().trim();
+export function phoneticHarmony(name: string): number {
+  const language = detectLanguage(name);
+  const phonemes = analyzer.getPhonemes(name, { language });
+  const stress = analyzer.getStressPattern(name, { language });
 
-  if (!lowerName) return 0;
+  const syllableCount = analyzer.countSyllables(name, { language });
+  if (!syllableCount || phonemes.length === 0) return 0.5;
 
-  if (/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(lowerName)) {
-    console.warn('Name contains non-alphabetic characters');
-    return 0.1; // return minimal score for invalid names
-  }
+  // Score components
+  const hasSonorants = phonemes.some(p => p.features?.sonorant);
+  const vowelConsonantBalance = calculateVowelConsonantBalance(phonemes);
+  const openEnding = /[aeiou]$/.test(name.toLowerCase()) ? 0.9 : 0.6;
 
-  try {
-    const structureScore = scoreSyllableStructure(lowerName);
-    const sonorityScore = scoreSonorityProfile(lowerName);
-    const vowelConsonantScore = scoreVowelConsonantBalance(lowerName);
-    const stressScore = scoreStressPattern(lowerName, metadata?.language || 'english');
-    const euphonyScore = scoreEuphonicPhonemes(lowerName);
+  // Weights
+  const weights = {
+    sonorants: 0.3,
+    vowelConsonant: 0.3,
+    openEnding: 0.2,
+    stressVariation: 0.2,
+  };
 
-    const WEIGHTS = {
-      structure: 0.3,
-      sonority: 0.2,
-      vowelConsonant: 0.15,
-      stress: 0.15,
-      euphony: 0.2,
-    };
+  const stressVariety = stress.length > 1 && stress[0] !== stress[1] ? 0.9 : 0.6;
 
-    const score =
-      WEIGHTS.structure * structureScore +
-      WEIGHTS.sonority * sonorityScore +
-      WEIGHTS.vowelConsonant * vowelConsonantScore +
-      WEIGHTS.stress * stressScore +
-      WEIGHTS.euphony * euphonyScore;
+  const score =
+    (hasSonorants ? 1 : 0.5) * weights.sonorants +
+    vowelConsonantBalance * weights.vowelConsonant +
+    openEnding * weights.openEnding +
+    stressVariety * weights.stressVariation;
 
-    return Math.round(score * 1000) / 1000; // round to 3 decimals
-  } catch (error) {
-    console.error(`Error computing phonetic harmony for '${name}':`, error);
-    return 0;
-  }
+  return Math.max(0, Math.min(1, score));
 }
 
-// --- Subcomponent scoring functions ---
-function scoreSyllableStructure(name: string): number {
-  const structure = syllableStructure(name); // e.g., ['CV', 'CVC']
-  const idealPatterns = ['CV', 'CVC', 'CVCV']; // optionally from metadata later
-  const matchCount = structure.filter((s) => idealPatterns.includes(s)).length;
-  return structure.length > 0 ? matchCount / structure.length : 0;
-}
-
-function scoreSonorityProfile(name: string): number {
-  return sonorityProfile(name); // returns score from 0–1
-}
-
-function scoreVowelConsonantBalance(name: string): number {
-  const { vowels, consonants } = analyzePhonemes(name);
-  const total = vowels + consonants;
-  if (total === 0) return 0;
-  const ratio = vowels / total;
-  return 1 - Math.abs(0.5 - ratio) * 2; // best at 0.5
-}
-
-function scoreStressPattern(name: string, language: string): number {
-  const pattern = estimateStressPattern(name, language);
-  if (language === 'english') return pattern === 'trochaic' ? 1 : 0.5;
-  if (language === 'italian') return pattern === 'penultimate' ? 1 : 0.5;
-  return 0.5; // fallback
-}
-
-function scoreEuphonicPhonemes(name: string): number {
-  const euphonics = ['l', 'm', 'n', 'r', 'a', 'e', 'i', 'o', 'u'];
-  const phonemes = name.toLowerCase().split('');
-  const match = phonemes.filter((p) => euphonics.includes(p)).length;
-  return phonemes.length > 0 ? match / phonemes.length : 0;
+function calculateVowelConsonantBalance(phonemes: any[]): number {
+  const vowels = phonemes.filter(p => p.type === 'vowel').length;
+  const consonants = phonemes.filter(p => p.type === 'consonant').length;
+  if (vowels + consonants === 0) return 0.5;
+  const ratio = vowels / (vowels + consonants);
+  return 1 - Math.abs(0.5 - ratio); // ideal balance around 0.5
 }
