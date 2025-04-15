@@ -51,7 +51,7 @@ const NAME_SOURCES: Record<Culture, NameEntry[]> = {
 function shuffle<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
 }
-
+// First, fix the culture weighting in generateGivenNames
 export function generateGivenNames({
   cultureWeights,
   surname,
@@ -59,41 +59,82 @@ export function generateGivenNames({
   gender,
   style = "any",
 }: GenerateOptions): GeneratedName[] {
-  const candidates: NameEntry[] = Object.entries(NAME_SOURCES)
-    .flatMap(([culture, list]) =>
-      list.map((entry) => ({
+  
+  // Validate inputs first to catch potential issues
+  if (!cultureWeights || Object.values(cultureWeights).every(w => w === 0)) {
+    console.warn("Invalid culture weights provided, defaulting to even distribution");
+    cultureWeights = { italian: 0.33, chinese: 0.33, us_english: 0.34 };
+  }
+  
+  // Normalize weights to ensure they sum to 1
+  const totalWeight = Object.values(cultureWeights).reduce((sum, w) => sum + w, 0);
+  const normalizedWeights: Record<Culture, number> = {} as Record<Culture, number>;
+  
+  for (const culture of Object.keys(cultureWeights) as Culture[]) {
+    normalizedWeights[culture] = cultureWeights[culture] / totalWeight;
+  }
+  
+  // Create a pool of filtered candidates based on dominant culture
+  const dominantCulture = Object.entries(normalizedWeights)
+    .sort((a, b) => b[1] - a[1])[0][0] as Culture;
+  
+  // Get all candidates but filter by dominant culture preference
+  const allCandidates: NameEntry[] = Object.entries(NAME_SOURCES)
+    .flatMap(([culture, list]) => {
+      // Apply strong weighting based on culture settings
+      const cultureWeight = normalizedWeights[culture as Culture] || 0;
+      
+      // Only include names from a culture if its weight is significant
+      // (prevents Italian names when Italian weight is 0%)
+      if (cultureWeight < 0.05) return [];
+      
+      return list.map((entry) => ({
         ...entry,
         culture,
-      }))
-    );
+      }));
+    });
 
-  const scored = shuffle(candidates)
+  // Apply gender filtering BEFORE scoring
+  const genderFiltered = gender !== "neutral" 
+    ? allCandidates.filter(entry => entry.gender === gender || entry.gender === "neutral")
+    : allCandidates;
+    
+  // Apply style filtering BEFORE scoring
+  const styleFiltered = style !== "any"
+    ? genderFiltered.filter(entry => entry.style === style || entry.style === "any" || !entry.style)
+    : genderFiltered;
+
+  // Now score the valid candidates
+  const scored = shuffle(styleFiltered)
     .map((entry) => {
       const rawName = entry.given_name || entry.name;
       if (!rawName) return null;
 
-      let score = scoreName(
-        rawName, 
-        surname,
-        entry, // Pass the full entry object
-        cultureWeights // Explicitly pass culture weights
-      );
+      // Base score
+      let score = scoreName(rawName, surname, entry);
 
-      // Style soft boost
+      // Style scoring - MUCH stronger boost/penalty
       if (style !== "any") {
-        if (entry.style === style) score *= 1.15;
-        else score *= 0.9;
+        if (entry.style === style) {
+          score *= 1.5; // 50% boost for style match
+        } else if (entry.style && entry.style !== "any") {
+          score *= 0.5; // 50% penalty for style mismatch
+        }
       }
 
-      // Gender soft boost
+      // Gender scoring - MUCH stronger boost/penalty
       if (gender !== "neutral") {
-        if (entry.gender === gender) score *= 1.15;
-        else score *= 0.9;
+        if (entry.gender === gender) {
+          score *= 1.5; // 50% boost for gender match
+        } else if (entry.gender && entry.gender !== "neutral") {
+          score *= 0.5; // 50% penalty for gender mismatch
+        }
       }
 
-      // Culture boost
-      const weight = cultureWeights[entry.culture as Culture] ?? 0;
-      const cultureBoost = 1 + weight * 0.5;
+      // Culture boost - make this MUCH more significant
+      const weight = normalizedWeights[entry.culture as Culture] ?? 0;
+      // Exponential boost based on weight - weight of 1.0 gives 3x boost, weight of 0 gives 0.1x
+      const cultureBoost = weight <= 0.05 ? 0.1 : Math.pow(3, weight);
       score *= cultureBoost;
 
       return {
