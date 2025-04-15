@@ -1,4 +1,7 @@
-// phonaesthetics.ts
+// engine/modules/phonaesthetics.ts
+
+import { analyzer } from './phoneme';
+import { detectLanguage } from './phoneme/utils/languageDetector';
 
 /**
  * Converts a name to an array of phonemes
@@ -7,15 +10,12 @@
  * @returns Array of phonemes
  */
 export function getPhonemes(name: string): string[] {
-  // This is a simplified implementation
-  // A real implementation would use a proper phoneme dictionary or API
-  return name.toLowerCase()
-    .replace(/[^a-z]/g, '')
-    .replace(/ph/g, 'f')
-    .replace(/th/g, 'θ')
-    .replace(/ch/g, 'tʃ')
-    .replace(/sh/g, 'ʃ')
-    .split('');
+  // Use new system internally while maintaining the same return type
+  const language = detectLanguage(name);
+  const phonemes = analyzer.getPhonemes(name, { language });
+  
+  // Map to array of string phonemes for backward compatibility
+  return phonemes.map(p => p.symbol);
 }
 
 /**
@@ -25,27 +25,8 @@ export function getPhonemes(name: string): string[] {
  * @returns Array of stress markers where '1' is primary stress, '2' is secondary, '0' is unstressed
  */
 export function getStressPattern(name: string): string[] {
-  const syllableCount = countSyllables(name);
-  
-  if (syllableCount <= 1) {
-    return ['1'];
-  }
-  
-  // Default English pattern for 2-syllable names is trochee (stress on first syllable)
-  if (syllableCount === 2) {
-    return ['1', '0'];
-  }
-  
-  // For 3+ syllable names, approximate common patterns
-  if (syllableCount === 3) {
-    return ['1', '0', '0']; // Dactyl pattern (common in English)
-  }
-  
-  // For longer names, apply a simplified pattern with primary stress
-  // on the antepenultimate (third from last) syllable
-  const pattern = Array(syllableCount).fill('0');
-  pattern[syllableCount - 3] = '1';
-  return pattern;
+  const language = detectLanguage(name);
+  return analyzer.getStressPattern(name, { language });
 }
 
 /**
@@ -55,22 +36,8 @@ export function getStressPattern(name: string): string[] {
  * @returns Number of syllables
  */
 export function countSyllables(name: string): number {
-  const cleaned = name.toLowerCase().replace(/[^a-z]/g, '');
-  
-  // If empty, return 0
-  if (!cleaned) return 0;
-  
-  // Count vowel sequences as syllable nuclei
-  const vowelGroups = cleaned.match(/[aeiouy]+/g) || [];
-  
-  // Handle special cases where adjacent vowels might be diphthongs (one syllable)
-  const diphthongs = (cleaned.match(/[aeiouy]{2}/g) || []).length;
-  const triphthongs = (cleaned.match(/[aeiouy]{3}/g) || []).length;
-  
-  // Subtract estimated diphthongs/triphthongs
-  const syllables = Math.max(1, vowelGroups.length - (diphthongs * 0.5) - (triphthongs * 0.7));
-  
-  return Math.round(syllables);
+  const language = detectLanguage(name);
+  return analyzer.countSyllables(name, { language });
 }
 
 /**
@@ -80,15 +47,8 @@ export function countSyllables(name: string): number {
  * @returns Array of syllables with their structure (C for consonant, V for vowel)
  */
 export function getSyllableStructure(name: string): string[] {
-  const cleaned = name.toLowerCase().replace(/[^a-z]/g, '');
-  
-  // Split name into syllables (simplified approach)
-  const syllables = splitIntoSyllables(cleaned);
-  
-  // Convert each syllable to CV pattern
-  return syllables.map(syllable => 
-    syllable.replace(/[aeiouy]/g, 'V').replace(/[^V]/g, 'C')
-  );
+  const language = detectLanguage(name);
+  return analyzer.getSyllableStructure(name, { language });
 }
 
 /**
