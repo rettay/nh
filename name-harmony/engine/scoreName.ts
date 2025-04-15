@@ -1,88 +1,74 @@
 // engine/scoreName.ts
-import { phoneticHarmony } from "./modules/phoneticHarmony";
-import { phoneticFlowWithSurname } from './modules/phoneticFlow';
 
+import { phoneticHarmony } from "./modules/phoneticHarmony";
+import { phoneticFlowWithSurname } from "./modules/phoneticFlow";
+import { culturalCoherence } from "./modules/culturalCoherence";
+import { emotionalResonance } from "./modules/emotionalResonance";
+import { distinctiveness } from "./modules/distinctiveness";
+import { pronounceability } from "./modules/pronounceability";
+import { US_ENGLISH_NAMES } from "@/data/names_us_english";
 import { CULTURE_PROFILES } from "@/engine/data/cultureProfiles";
 
 export function scoreName(
   first: string,
   last: string,
-  culture: string = "us_english",
-  gender: string = "unknown"
+  cultureBlend: Record<string, number> = { us_english: 1.0 },
+  gender: string = "unknown",
+  subjectType: "person" | "pet" | "product" | "fantasy" = "person"
 ): {
   score: number;
   breakdown: Record<string, string>;
 } {
   const breakdown: Record<string, string> = {};
-  let score = 0;
+  let totalScore = 0;
 
-  const fullName = `${first} ${last}`.toLowerCase();
-  const profile = CULTURE_PROFILES[culture];
+  // Weights by subject type
+  const weights = {
+    phoneticHarmony: 0.2,
+    phoneticFlow: 0.15,
+    culturalCoherence: 0.2,
+    emotionalResonance: 0.15,
+    distinctiveness: 0.15,
+    pronounceability: 0.15,
+  };
 
-  // Common Ending
-  if (profile?.commonEndings.some((ending) => first.endsWith(ending.replace("-", "")))) {
-    score += 10;
-    breakdown["Cultural Ending"] = "+10 — Ends with culturally familiar sound";
-  } else {
-    breakdown["Cultural Ending"] = "0 — Uncommon ending for this culture";
-  }
+  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
 
-  // Forbidden Phonemes
-  if (profile?.forbiddenPhonemes?.some((p) => first.includes(p))) {
-    score -= 10;
-    breakdown["Forbidden Sounds"] = "-10 — Contains phonemes disallowed in culture";
-  } else {
-    breakdown["Forbidden Sounds"] = "+0 — No forbidden phonemes";
-  }
+  // Phonetic Harmony
+  const harmony = phoneticHarmony(first);
+  totalScore += harmony * weights.phoneticHarmony;
+  breakdown["Phonetic Harmony"] = `+${(harmony * 10).toFixed(1)} — Sound structure`;
 
-  // Gender Alignment
-  if (gender !== "unknown" && profile?.genderMarkers?.[gender]) {
-    const matches = profile.genderMarkers[gender].filter((s) => first.endsWith(s.replace("-", "")));
-    if (matches.length > 0) {
-      score += 10;
-      breakdown["Gender Match"] = "+10 — Ending aligns with cultural gender norm";
-    } else {
-      breakdown["Gender Match"] = "0 — Gender alignment not detected";
-    }
-  }
+  // Phonetic Flow with Surname
+  const flow = phoneticFlowWithSurname(first, last);
+  totalScore += flow * weights.phoneticFlow;
+  breakdown["Phonetic Flow"] = `+${(flow * 10).toFixed(1)} — Transition with surname`;
 
-  // Phonetic Harmony Score (scaled from 0–1 to 0–10)
-  const flowScore = phoneticFlowWithSurname(first, last);
-  const flowWeighted = Math.round(flowScore * 10); // scale 0–1 → 0–10
+  // Cultural Coherence
+  const cultureScore = culturalCoherence(first, cultureBlend, { gender });
+  totalScore += cultureScore * weights.culturalCoherence;
+  breakdown["Cultural Coherence"] = `+${(cultureScore * 10).toFixed(1)} — Fit with cultural norms`;
 
-  const harmonyScore = phoneticHarmony(first);
-  const harmonyWeighted = Math.round(harmonyScore * 10);  // scale to 0–10
-  score += harmonyWeighted;
-  breakdown["Phonetic Harmony"] = `+${harmonyWeighted} — Sound aesthetic score (raw: ${harmonyScore.toFixed(2)})`;
+  // Emotional Resonance
+  const emotion = emotionalResonance(first);
+  totalScore += emotion * weights.emotionalResonance;
+  breakdown["Emotional Resonance"] = `+${(emotion * 10).toFixed(1)} — Aesthetic appeal`;
 
-  
-  score += flowWeighted;
-  breakdown["Phonetic Flow"] = `+${flowWeighted} — Flow with surname (raw: ${flowScore.toFixed(2)})`;
-  
-  // Final normalization
-  score = Math.max(0, Math.min(100, score));
+  // Distinctiveness
+  const distinct = distinctiveness(first, US_ENGLISH_NAMES);
+  totalScore += distinct * weights.distinctiveness;
+  breakdown["Distinctiveness"] = `+${(distinct * 10).toFixed(1)} — Uniqueness`;
+
+  // Pronounceability
+  const pronounce = pronounceability(first);
+  totalScore += pronounce * weights.pronounceability;
+  breakdown["Pronounceability"] = `+${(pronounce * 10).toFixed(1)} — Ease of pronunciation`;
+
+  // Normalize to 0–100 scale
+  const normalizedScore = Math.round((totalScore / totalWeight) * 100);
 
   return {
-    score,
-    breakdown,
+    score: normalizedScore,
+    breakdown
   };
-}
-
-
-// Optional helper for use in generator
-export function scoreFullName(
-  fullName: string,
-  culture: string = "us_english",
-  gender: string = "unknown"
-): {
-  score: number;
-  breakdown: Record<string, string>;
-} {
-  
-  console.log("Loaded profile:", CULTURE_PROFILES[culture]);  
-  const [first, ...rest] = fullName.trim().split(" ");
-  const last = rest.join(" ") || "";
-
-  
-  return scoreName(first, last, culture, gender);
 }
